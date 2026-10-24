@@ -101,7 +101,7 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .phone{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
 .num{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;user-select:all;-webkit-user-select:all;word-break:break-all}
 .help p+p{margin-top:6px}
-.help ol{margin:0;padding-left:20px;display:grid;gap:4px}
+.help ol,#hometip ol{margin:0;padding-left:20px;display:grid;gap:4px}
 .foot{font-size:14px;color:var(--muted);display:grid;gap:8px}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--surface);border-top:1px solid var(--line);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:8px calc(8px + env(safe-area-inset-bottom,0px))}
 nav.tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -886,6 +886,30 @@ function phoneHTML(label, num, id){
   return `<div class="card"><p class="label">${label}</p><div class="phone"><a class="num" id="${id}" href="${telHref(num)}">${esc(num)}</a>
     <button type="button" class="btn small ghost" data-act="copy:${id}">${flash.copied === id ? 'Copied' : 'Copy'}</button></div></div>`;
 }
+/* ---------- add to home screen ---------- */
+// iPhone keeps a home-screen app's data separate from Safari's, so the tip comes before setup.
+const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const phoneKind = () => { const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+  return /Android/.test(ua) ? 'android' : ''; };
+let installEvt = null;   // Chrome on Android: its own "Install app" prompt, kept for our button
+// redraw only the tip and the Help card, so a half-filled setup form is kept
+const redrawHome = () => { const t = $('#hometip'), h = $('#homehelp'); if (t) t.outerHTML = homeTipHTML(); if (h) h.outerHTML = homeHelpHTML(); };
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; redrawHome(); });
+window.addEventListener('appinstalled', () => { installEvt = null; redrawHome(); });
+function homeStepsHTML(){
+  if (phoneKind() === 'ios') return `<ol><li>Tap the Share button <span aria-hidden="true">(a square with an arrow)</span> in your browser.</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>Open <b>Recovery</b> from your home screen.</li></ol>`;
+  if (installEvt) return `<button type="button" class="btn small" data-act="install">Add to home screen</button>`;
+  return `<ol><li>Tap the <b>⋮</b> menu at the top right of Chrome.</li><li>Tap <b>Add to Home screen</b> or <b>Install app</b>.</li><li>Open <b>Recovery</b> from your home screen.</li></ol>`;
+}
+function homeTipHTML(){
+  if (isStandalone() || !phoneKind() || S.homeTip) return '';
+  return `<section class="card" id="hometip"><h3>First, add this app to your home screen</h3>
+    <p>Then it opens in one tap, like any other app.${phoneKind() === 'ios' ? ' Do this before you set up, or you’ll have to set up again in the home screen app.' : ''}</p>
+    ${homeStepsHTML()}<div class="row"><button type="button" class="btn small line" data-act="hometip-skip">Not now</button></div></section>`;
+}
+const homeHelpHTML = () => isStandalone() || !phoneKind() ? '' : `<section class="card help" id="homehelp"><h3>Add the app to your home screen</h3>${homeStepsHTML()}</section>`;
+
 function helpHTML(){
   return `<section class="help"><h2 class="label">Call the clinic</h2>
       ${P.name ? `<p class="prac">${esc(P.name)}</p>` : ''}
@@ -896,6 +920,7 @@ function helpHTML(){
       <p>Lukewarm liquids once your lips are no longer numb.</p><p>Scrambled eggs, yogurt and soft cheese are good.</p>
       <p>Avoid refined sugar and spicy food.</p><p>Applesauce helps with nausea on antibiotics.</p></section>
     <section class="card help"><h3>Dressing or stitches come loose</h3><p>Not a problem unless there is pain or heavy bleeding.</p></section>
+    ${homeHelpHTML()}
     <section class="foot"><p>Your sheet gives two lengths for two steps. This app uses: salt rinses for ${CONFIG.rinseDays} days, and brushing the graft area from day ${CONFIG.graftBrushDay}. Please check with your periodontist.</p>
       <p>This app is a reminder aid based on your periodontist's instruction sheet.</p>
       ${CONFIG.feedbackUrl ? `<p id="help-fb">Something not working, or an idea? <a href="${esc(fbHref('Help tab'))}" target="_blank" rel="noopener">Send feedback or report a problem</a></p>` : ''}
@@ -923,6 +948,7 @@ function setupHTML(){
   const clinicF = `<div class="f"><label for="s-clinic">Clinic phone (needed to call the clinic)</label><input type="tel" id="s-clinic" value="${esc(st.clinic)}" autocomplete="tel" required aria-required="true" aria-describedby="clinic-err"><div id="clinic-err" class="msg warn" role="alert" hidden></div></div>`;
   const phones = (P.phone ? '' : clinicF) + (P.mobile ? '' : f('s-perio','Periodontist mobile (optional)','tel',st.perio));
   return `<div class="intro">${first ? '<h1>Let’s set up your plan</h1><p class="sub">About 30 seconds. You can change any of this later in Settings.</p>' : '<h1>Settings</h1>'}</div>
+  ${first ? homeTipHTML() : ''}
   <form id="setup" novalidate>
     <fieldset><legend>Surgery</legend>${f('s-surgery','Surgery date and time','datetime-local',st.surgery)}
       ${ck('s-sed','I had sedation (pills or IV)',st.sedation)}${ck('s-cura','I was given Curasept mouthwash',st.curasept)}</fieldset>
@@ -1009,6 +1035,8 @@ document.addEventListener('click', e => {
   if (act === 'fb'){ S.fb[arg] = now.toISOString(); save(); setTimeout(render, 0); return; }   // link opens first, then the card goes
   if (act !== 'dose-ics' && act !== 'remind-yes' && act !== 'remind-no'){ flash.taken = null; flash.confirm = null; }
   if (!act.startsWith('take-at')){ flash.takeAt = null; flash.takeAtErr = null; }
+  if (act === 'hometip-skip'){ S.homeTip = 'skip'; save(); const t = $('#hometip'); if (t) t.remove(); return; }   // keep half-filled setup
+  if (act === 'install'){ if (installEvt){ installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; redrawHome(); }); } return; }
   if (act === 'reset'){ flash.reset = true; render(); return; }
   if (act === 'reset-no'){ flash = {}; render(); return; }
   if (act === 'reset-yes'){ S = blank(); try { localStorage.removeItem(KEY); } catch(e) {} flash = {}; previewDay = null; tab = 'setup'; render(); window.scrollTo(0,0); return; }
