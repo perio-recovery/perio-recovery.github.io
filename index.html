@@ -467,12 +467,13 @@ function fbHref(stage, usage){
 }
 // Anonymous usage summary for the day 12 survey: counts only, built on the phone, sent only if the patient ticks the box.
 let shareUsage = false;
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
 function usageSummary(now){
   const n = dayIdx(new Date(S.setup.surgery), now), ks = activeMeds();
   const doses = ks.reduce((a, k) => a + (S.doses[k] || []).length, 0);
   const ua = navigator.userAgent, phone = /iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : 'other';
-  return [`Recovery day ${n}`, `opened on ${S.use.days.length} days`, `${Object.keys(S.ticks).length} tasks ticked`,
-    `${ks.length} ${ks.length === 1 ? 'medicine' : 'medicines'}, ${doses} doses logged`, `${S.use.doseCal} next-dose reminders saved`,
+  return [`Recovery day ${n}`, `opened on ${plural(S.use.days.length, 'day')}`, `${plural(Object.keys(S.ticks).length, 'task')} ticked`,
+    `${plural(ks.length, 'medicine')}, ${plural(doses, 'dose')} logged`, `${plural(S.use.doseCal, 'next-dose reminder')} saved`,
     `all-reminders file ${S.use.allCal ? 'used' : 'not used'}`, `“I’ve just eaten” ${S.meals.length}×`, phone].join(' · ');
 }
 // Today: a feedback card that stays until the patient opens the form or taps "Not now" (S.fb[id]).
@@ -634,7 +635,7 @@ function comingUp(n, s){
   const st = S.setup, t = n + 1, R = CONFIG.rinseDays, m = {};
   const add = (d, txt) => { if (txt) m[d] = m[d] ? m[d] + ' ' + txt : txt; };
   add(1, 'Salt-water rinses after each meal start. You can return to work.');
-  add(2, 'At ' + fmt(s) + ' the first 48 hours end (no smoking, no alcohol until then).');
+  add(2, 'At ' + fmt(new Date(s.getTime() + 48*H)) + ' the first 48 hours end (no smoking, no alcohol until then).');
   add(3, 'Swelling often peaks on day 3. Ice packs help.');
   add(4, st.curasept ? 'Curasept rinses start: 60 seconds, morning and before bed.' : null);
   if (endRinseText(CONFIG)) add(R+1, endRinseText(CONFIG));
@@ -663,7 +664,7 @@ function medItems(now){
 
 function itemHTML(it, now, key){
   const late = it.t <= addMin(now,-30);
-  const whenTxt = it.t <= now ? (late ? 'since ' + fmt(it.t) : 'now') : fmt(it.t);
+  const whenTxt = it.t <= now ? (late ? 'since ' + whenStr(it.t, now) : 'now') : fmt(it.t);
   if (it.med){
     if (it.due) return `<li class="item ${late?'late':''}"><span class="dot" aria-hidden="true"></span><div class="txt"><div class="t">${esc(it.title)}</div><div class="d">${esc(it.detail)} Due ${whenTxt}.</div></div><button type="button" class="btn small" data-act="take:${it.med}">Taken</button>
       <div class="full">${flash.early === it.med && flash.earlyAt ? earlyAtHTML(it.med) : takeAtBtn(it.med) + takeAtHTML(it.med)}</div></li>`;
@@ -835,7 +836,7 @@ function medsHTML(now){
       } else {
         const late = nd <= addMin(now,-30);
         tk = nd > now ? justTaken(k) : null;
-        h += `<p class="due ${late?'late':''}"${tk ? ' role="status"' : ''}>${nd <= now ? (late ? 'Overdue since ' + fmt(nd) : 'Due now') : tk ? `Not before ${esc(whenStr(nd, now))}<span class="tk"> · taken ${fmt(tk)}</span>` : 'Next due ' + esc(whenStr(nd, now))}</p>`;
+        h += `<p class="due ${late?'late':''}"${tk ? ' role="status"' : ''}>${nd <= now ? (late ? 'Overdue since ' + esc(whenStr(nd, now)) : 'Due now') : tk ? `Not before ${esc(whenStr(nd, now))}<span class="tk"> · taken ${fmt(tk)}</span>` : 'Next due ' + esc(whenStr(nd, now))}</p>`;
         if (late) h += `<p class="sub">Take it now if you still need it, then the next one is worked out from when you take it. Never take two doses at once.</p>`;
         if (nd > now){
           const done = isReminded(k, nd);
