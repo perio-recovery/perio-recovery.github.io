@@ -497,7 +497,19 @@ function defaults(){
           sedation:false, curasept:false, meds, abxDays:7, clinic:(CONFIG.prefill||{}).phone||'', perio:''};
 }
 const activeMeds = () => Object.keys(MEDS).filter(k => S.setup.meds[k] && S.setup.meds[k].on);
-const isFinished = k => !!S.finished[k];
+const isFinished = k => !!S.finished[k] || autoEnded(k);
+// Antibiotic course end: course length (days) from the first logged dose, or from surgery if none is logged yet.
+function courseEnd(k){
+  if (!S.setup) return null;
+  const days = +S.setup.abxDays; if (MEDS[k].kind !== 'abx' || !(days > 0)) return null;
+  const log = (S.doses[k] || []).slice().sort();
+  return new Date((log.length ? new Date(log[0]) : new Date(S.setup.surgery)).getTime() + days*24*H);
+}
+// Once the course length has passed, the course counts as finished: reminders stop (the button still works earlier).
+// Worked out each time (not saved), so the #preview day slider can go back and forth.
+const autoEnded = k => { if (S.finished[k]) return false; const e = courseEnd(k); return !!e && appNow() >= e; };
+const finishedAt = k => S.finished[k] ? new Date(S.finished[k]) : courseEnd(k);
+const finMap = () => { const m = Object.assign({}, S.finished); for (const k of activeMeds()) if (autoEnded(k)) m[k] = courseEnd(k).toISOString(); return m; };
 // A calendar reminder was added for exactly this next-dose time (S.reminded: medKey -> ISO).
 const isReminded = (k, nd) => !!nd && S.reminded[k] === nd.toISOString();
 function markReminded(k){
@@ -688,7 +700,7 @@ function todayHTML(now){
     return addClinicHTML() + `<section class="now"><h2>Your plan starts on surgery day</h2><p>Surgery: ${esc(longDay(s))} at ${fmt(s)}. This screen will show what to do and when from then on.</p></section>
       ${medRemindHTML(now)}${calLinkHTML(n)}`;
   }
-  const tasks = n <= PLAN_DAYS ? tasksFor(st, S, now, CONFIG) : [];
+  const tasks = n <= PLAN_DAYS ? tasksFor(st, Object.assign({}, S, {finished: finMap()}), now, CONFIG) : [];
   const meds = medItems(now);
   const keyOf = it => dk + '|' + it.id;
   const nowList = [], later = [], done = [];
@@ -774,7 +786,7 @@ function saveICS(text, name){
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 4000);
 }
 function downloadICS(){
-  const now = appNow(), r = buildICS(S.setup, S, CONFIG, {from: addMin(now,-1), now: new Date()});
+  const now = appNow(), r = buildICS(S.setup, Object.assign({}, S, {finished: finMap()}), CONFIG, {from: addMin(now,-1), now: new Date()});
   if (!r.count) flash.ics = 'There are no reminders left to add.';
   else {
     saveICS(r.text, 'graft-recovery.ics'); S.use.allCal++; save();
@@ -798,11 +810,13 @@ function medNotesHTML(k){
 function finishHTML(k){
   const med = MEDS[k];
   if (med.kind !== 'abx' || isFinished(k)) return '';
-  return flash.finish === k
+  const end = courseEnd(k);
+  const endTxt = end ? `<p class="sub">Your ${esc(S.setup.abxDays)}-day course: reminders stop on ${esc(longDay(end))}. Finished sooner? Tap below.</p>` : '';
+  return endTxt + (flash.finish === k
     ? `<div class="msg"><p>Have you taken every ${esc(med.name.toLowerCase())} dose?</p><div class="row"><button type="button" class="btn small" data-act="finish-yes:${k}">Yes, all finished</button><button type="button" class="btn small line" data-act="finish-no">Not yet</button></div></div>`
-    : `<button type="button" class="btn line" data-act="finish:${k}">Finished my course</button>`;
+    : `<button type="button" class="btn line" data-act="finish:${k}">Finished my course</button>`);
 }
-const finishedHTML = k => `<p class="due">Course finished</p><p class="sub">Finished ${esc(longDay(new Date(S.finished[k])))}. Probiotic drink or yogurt daily for 3 days is on your Today list.</p>`;
+const finishedHTML = k => `<p class="due">Course finished</p><p class="sub">${autoEnded(k) ? 'Your ' + esc(S.setup.abxDays) + '-day course ended' : 'Finished'} ${esc(longDay(finishedAt(k)))}. Probiotic drink or yogurt daily for 3 days is on your Today list.</p>`;
 
 function medsHTML(now){
   const st = S.setup, ks = activeMeds();
