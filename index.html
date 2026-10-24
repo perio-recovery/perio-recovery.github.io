@@ -581,6 +581,7 @@ function render(){
   if (tab === 'setup') m.innerHTML = setupHTML();
   else if (tab === 'meds') m.innerHTML = medsHTML(now);
   else if (tab === 'help') m.innerHTML = helpHTML();
+  else if (tab === 'reminders') m.innerHTML = remindersHTML();
   else m.innerHTML = todayHTML(now);
   if (tab === 'setup') wireSetup();
   if (foc) focusTakeAt();
@@ -762,6 +763,9 @@ function medRemindHTML(now){
 }
 
 // Settings: calendar setup for the routine (non-medicine) reminders.
+// Phone reminders: their own screen (no tab button), opened from Today (days 0–1) or Settings; Back returns there.
+let remindFrom = 'today';
+const remindersHTML = () => `<p><button type="button" class="linkbtn u" data-act="tab:${remindFrom}">← Back</button></p>` + calHTML();
 function calHTML(){
   const L = calLinks(S.setup, CONFIG);
   return `<section id="calsec" aria-labelledby="calh"><h2 class="label" id="calh">Phone reminders</h2>
@@ -790,7 +794,7 @@ function downloadICS(){
     flash.ics = r.count + ' reminders are in the file graft-recovery.ics. Open it to add them to your calendar.';
   }
   const c = $('#calsec');   // on Settings, redraw only this section so unsaved form edits are kept
-  if (tab === 'setup' && c) c.outerHTML = calHTML(); else render();
+  if (tab === 'reminders' && c) c.outerHTML = calHTML(); else render();
 }
 function downloadDose(k){
   const now = appNow(), nd = medStart(S.setup, S, k);
@@ -933,7 +937,7 @@ function setupHTML(){
     <button type="submit" class="btn wide">${first ? 'Start my plan' : 'Save'}</button>
     ${first ? '' : '<button type="button" class="btn line wide" data-act="tab:today">Cancel</button>'}
   </form>
-  ${first ? '' : calHTML()}
+  ${first ? '' : `<section class="card" id="calrow"><h3>Phone reminders</h3><p class="sub">Rinse and recovery reminders in your phone’s calendar.</p><button type="button" class="btn line" data-act="cal-setup">Set up phone reminders</button></section>`}
   ${first ? '' : (flash.reset
     ? `<div class="msg warn" role="alert"><p>This erases your plan, ticks and medicine log on this phone. You will start setup again.</p>
         <div class="row"><button type="button" class="btn small" data-act="reset-yes">Yes, start over</button><button type="button" class="btn small line" data-act="reset-no">Keep my plan</button></div></div>`
@@ -1009,7 +1013,7 @@ document.addEventListener('click', e => {
   if (act === 'reset-no'){ flash = {}; render(); return; }
   if (act === 'reset-yes'){ S = blank(); try { localStorage.removeItem(KEY); } catch(e) {} flash = {}; previewDay = null; tab = 'setup'; render(); window.scrollTo(0,0); return; }
   if (act === 'tab'){ tab = arg; flash = {}; render(); window.scrollTo(0,0); return; }
-  if (act === 'cal-setup'){ tab = 'setup'; flash = {}; render(); const c = $('#calsec'); if (c) c.scrollIntoView({block:'start'}); return; }
+  if (act === 'cal-setup'){ remindFrom = tab === 'setup' ? 'setup' : 'today'; tab = 'reminders'; flash = {}; render(); window.scrollTo(0,0); return; }
   if (act === 'add-clinic'){ tab = 'setup'; flash = {}; render(); const el = $('#s-clinic'); if (el){ el.focus({preventScroll:true}); el.scrollIntoView({block:'center'}); } return; }
   if (act === 'tick'){ if (S.ticks[arg]) delete S.ticks[arg]; else S.ticks[arg] = now.toISOString(); save(); render(); return; }
   if (act === 'take' || act === 'take-force'){
